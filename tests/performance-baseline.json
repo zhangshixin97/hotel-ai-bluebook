@@ -1,0 +1,13 @@
+{
+  "baseline_commit": "e8430f7353dd08e9d4150d4b0d34cf352906714b",
+  "article_html_bytes_before": 11527589,
+  "article_html_bytes_after": 243116,
+  "pricing_html_bytes_before": 2411431,
+  "pricing_html_bytes_after": 27149,
+  "manifest_bytes_before": 220333,
+  "manifest_bytes_after": 21916,
+  "search_index_bytes": 197228,
+  "screenshot_count": 61,
+  "full_webp_bytes": 4279380,
+  "notes": "File sizes, not measured transfer time or real-device performance."
+}
