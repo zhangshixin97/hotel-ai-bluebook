@@ -6,10 +6,12 @@
 <title>订单来了酒店民宿 AI 实操入门蓝皮书</title>
 <link rel="icon" type="image/png" href="assets/img/favicon.png">
 <link rel="stylesheet" href="assets/content.css">
-<link rel="stylesheet" href="assets/app.css">
+<link rel="stylesheet" href="assets/reader.css">
 </head>
 <body>
 <a class="skip-link" href="#main">跳到正文</a>
+<div class="site-status" id="siteStatus" role="status">正在加载目录…</div>
+<noscript><p class="site-status">阅读蓝皮书需要启用 JavaScript。</p></noscript>
 
 <!-- ============ 顶栏（正文页） ============ -->
 <header class="topbar" id="topbar" hidden>
@@ -18,6 +20,7 @@
     <button class="pill-btn" id="searchBtn">搜索 <kbd>⌘K</kbd></button>
     <button class="pill-btn" id="tocBtn">目录 · <span id="tocCount">37</span> 篇</button>
     <button class="pill-btn contact-btn" data-act="contact">联系我</button>
+    <button class="pill-btn mobile-share" id="mobileShare">分享</button>
   </div>
 </header>
 
@@ -127,6 +130,10 @@
     <article class="article-main" id="main">
       <h1 class="art-title" id="artTitle"></h1>
       <div class="art-meta" id="artMeta"></div>
+      <details class="mobile-toc" id="mobileToc" hidden>
+        <summary>本篇小节</summary>
+        <nav id="mobileTocBody" aria-label="本篇小节"></nav>
+      </details>
       <div class="article-body" id="artBody"></div>
       <nav class="art-nav" id="artNav"></nav>
     </article>
@@ -144,7 +151,7 @@
 <div class="search-mask" id="searchMask" hidden>
   <div class="search-box">
     <input id="searchInput" type="text" placeholder="搜标题、正文、指令话术…" autocomplete="off">
-    <span class="search-esc">Esc</span>
+    <button class="search-esc" id="searchClose" aria-label="关闭搜索">关闭</button>
     <div class="search-list" id="searchList"></div>
     <div class="search-foot" id="searchFoot">↑↓ 选择 · 回车打开</div>
   </div>
@@ -156,9 +163,10 @@
     <button class="contact-close" id="contactClose" title="关闭">×</button>
     <div class="contact-tt">联系我</div>
     <div class="contact-qr">
-      <img src="assets/img/qr.jpg" alt="微信二维码">
+      <img src="assets/img/qr.jpg" alt="微信二维码" width="630" height="630" loading="lazy" decoding="async">
     </div>
-    <div class="contact-note">扫码加微信，备注「蓝皮书」<br>反馈、纠错、合作都可以直接说</div>
+    <div class="contact-note">扫码或长按识别，加微信备注「蓝皮书」<br>反馈、纠错、合作都可以直接说</div>
+    <button class="pill-btn" id="copyWechat">复制微信号：zhang916148898</button>
     <div class="contact-author">张世鑫｜酒店民宿 AI 实战赋能</div>
   </div>
 </div>
@@ -204,6 +212,15 @@
 
 <div class="toast" id="toast" hidden></div>
 
-<script src="assets/app.js"></script>
+<dialog class="image-dialog" id="imageDialog" aria-label="截图大图">
+  <div class="image-toolbar">
+    <span>截图大图 · 放大后可左右滑动</span>
+    <button id="imageZoom" aria-pressed="false">放大细节</button>
+    <button id="imageClose">关闭</button>
+  </div>
+  <div class="image-scroll"><img id="viewerImage" alt="截图大图"></div>
+</dialog>
+
+<script src="assets/reader.js"></script>
 </body>
 </html>
