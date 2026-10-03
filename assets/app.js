@@ -6,7 +6,14 @@
         topbar = $("#topbar"), fab = $("#fab");
   let M = null;            // manifest
   const cache = {};        // article fragments
-  let spy = null;
+  let spy = null, routeVersion = 0, searchData = null, searchPromise = null;
+  const getLast = () => { try { return JSON.parse(localStorage.getItem("hb-last") || "null"); } catch { return null; } };
+  async function getResource(url, json = false) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    try { const r = await fetch(url, { signal: controller.signal }); if (!r.ok) throw new Error("HTTP " + r.status); return await (json ? r.json() : r.text()); }
+    finally { clearTimeout(timer); }
+  }
 
   const PICKS = ["04", "10", "12", "17"];
   const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -17,21 +24,21 @@
     return el ? JSON.parse(el.textContent) : null;
   }
   async function load() {
-    M = embeddedJSON("manifest-json") || await (await fetch("data/manifest.json")).json();
+    M = embeddedJSON("manifest-json") || await getResource("data/manifest.json", true);
     renderCover();
     buildTocView();
     buildPet();
     route();
   }
   async function loadArticle(id) {
-    if (cache[id]) return cache[id];
+    if (Object.prototype.hasOwnProperty.call(cache, id)) return cache[id];
     const emb = embeddedJSON("articles-json");
-    cache[id] = emb ? (emb[id] || "") : await (await fetch(`articles/${id}.html`)).text();
+    cache[id] = emb ? (emb[id] || "") : await getResource(`articles/${id}.html`);
     return cache[id];
   }
 
   const byId = (id) => M.articles.find((a) => a.id === id);
-  const pieceNo = (a) => `第 ${a.n} / ${M.meta.total} 篇`;
+  const pieceNo = (a) => `全书第 ${a.n} / ${M.meta.total} 篇${/^\d+$/.test(a.id) ? " · 实操 " + a.id : ""}`;
 
   /* ---------------- 封面 ---------------- */
   function renderCover() {
@@ -40,19 +47,23 @@
     $("#heroStats").textContent =
       `${m.total} 篇 · 约 ${(m.chars / 10000).toFixed(1)} 万字 · ${m.shots} 张真机截图 · 64 条官方指令`;
 
+    $(".tocv-title").textContent = `${m.total} 篇，照着做就落地`;
+    $(".sec-all").textContent = `全部 ${m.total} 篇 →`;
+    $("#heroStats").textContent += ` · 其中 ${M.articles.filter(a => /^\d+$/.test(a.id)).length} 篇编号实操`;
+    $("#readingPaths").innerHTML = [["第一次使用", "02", "注册登录 → 跑成第一件事"], ["日常运营", "10", "晨报、交班、点评回复"], ["收益增长", "17", "调价、竞对、淡日去化"], ["多店管理", "24", "多店日报、协作与 SOP"]].map(([name,id,desc]) => `<a href="#/p/${id}" class="path-card"><strong>${name}</strong><span>${desc}</span><b aria-hidden="true">→</b></a>`).join("");
     const titles = M.articles.map((a) => a.short);
     $("#marqueeTrack").innerHTML = [...titles, ...titles].map((t) => `<span>${esc(t)}</span>`).join("");
 
     $("#pickGrid").innerHTML = PICKS.map((id, i) => {
       const a = byId(id); if (!a) return "";
-      return `<div class="pick-card" data-id="${a.id}">
+      return `<a class="pick-card" href="#/p/${a.id}" data-id="${a.id}">
         <span class="pick-tag">${esc(a.groupName)}</span>
         <span class="pick-no">${String(i + 1).padStart(2, "0")}</span>
         <h3 class="pick-title">${esc(a.short)}</h3>
         <p class="pick-ex">${esc(a.excerpt)}…</p>
         <span class="pick-meta">约 ${a.mins} 分钟 · 可照做</span>
-        <button class="pick-go">→</button>
-      </div>`;
+        <span class="pick-go" aria-hidden="true">→</span>
+      </a>`;
     }).join("");
     document.querySelectorAll(".pick-card").forEach((c) =>
       (c.onclick = () => (location.hash = `#/p/${c.dataset.id}`)));
@@ -65,18 +76,18 @@
         revenue: "让每间房卖出对的价。调价建议、竞对、淡日去化、节假日三套方案、ROI……",
         chain: "一个人把管理半径拉大。多店日报、企业微信打通、SOP 造技能、新店 30 天上线。",
       };
-      return `<div class="file-card" data-g="${k}">
+      return `<a class="file-card" href="#/toc/${k}" data-g="${k}">
         <span class="file-no">FILE / ${String(i + 1).padStart(2, "0")}</span>
         <h3 class="file-name">${esc(g.name)}</h3>
         <p class="file-desc">${descs[k]}</p>
         <span class="file-count"><b>${g.count}</b> 篇 <span>→</span></span>
-      </div>`;
+      </a>`;
     }).join("");
     $("#fileGrid").innerHTML = files;
     document.querySelectorAll(".file-card").forEach((c) =>
-      (c.onclick = (e) => { e.stopPropagation(); openPet(); }));
+      (c.onclick = () => { location.hash = `#/toc/${c.dataset.g}`; }));
 
-    const last = JSON.parse(localStorage.getItem("hb-last") || "null");
+    const last = getLast();
     if (last && byId(last.id)) {
       $("#continueTitle").textContent = byId(last.id).short;
       const link = $("#continueLink");
@@ -91,7 +102,7 @@
       const list = M.articles.filter((a) => a.group === g.key);
       const sub = list.length ? list[0].groupSub : "";
       return `
-      <section class="tocv-group">
+      <section class="tocv-group" id="group-${g.key}">
         <div class="tocv-ghead">
           <span class="tocv-gno">${String(gi + 1).padStart(2, "0")}</span>
           <span class="tocv-gname">${esc(g.name)}</span>
@@ -126,7 +137,7 @@
       </div>`).join("");
     $("#petPanelBody").querySelectorAll(".pg-item").forEach((it) =>
       it.addEventListener("click", () => closePet()));
-    const last = JSON.parse(localStorage.getItem("hb-last") || "null");
+    const last = getLast();
     $("#petPanelFt").innerHTML =
       (last && byId(last.id) ? `<a class="ppf-cont" href="#/p/${last.id}">↪ 继续读《${esc(byId(last.id).short)}》</a>` : "") +
       `<button id="ppfSearch">搜索</button><button id="ppfContact">联系我</button><a href="#/">封面</a>`;
@@ -134,7 +145,7 @@
     $("#ppfContact").onclick = () => { closePet(); openContact(); };
   }
   function openPet() {
-    petPanel.hidden = false; petBubble.hidden = true; petOpened = true;
+    petPanel.hidden = false; petBubble.hidden = true; petOpened = true; $("#petPanelClose").focus();
   }
   function closePet() { petPanel.hidden = true; }
   $("#petBtn").onclick = () => { petPanel.hidden ? openPet() : closePet(); };
@@ -161,30 +172,37 @@
 
   /* ---------------- 路由 ---------------- */
   function route() {
+    if (!M) return;
+    ++routeVersion;
     const h = location.hash;
+    closeSearch(); closeContact(); closeImage();
     const m = h.match(/^#\/p\/([\w-]+)/);
-    if (m && byId(m[1])) showArticle(byId(m[1]), h.split("#s")[1]);
+    if (m && byId(m[1])) showArticle(byId(m[1]), h.split("#")[2]);
     else if (h.startsWith("#/toc")) showToc();
     else showCover();
   }
   window.addEventListener("hashchange", route);
 
   function showToc() {
+    document.body.classList.remove("reading");
     coverView.hidden = true; articleView.hidden = true; tocView.hidden = false;
     topbar.hidden = false; fab.hidden = true;
     readProgress.hidden = true;
     document.title = "全书目录 · 订单来了蓝皮书";
     closePet();
     window.scrollTo(0, 0);
+    const group = location.hash.split("/")[2];
+    if (group) document.getElementById(`group-${group}`)?.scrollIntoView();
   }
 
   function showCover() {
+    document.body.classList.remove("reading");
     coverView.hidden = false; articleView.hidden = true; tocView.hidden = true;
     topbar.hidden = true; fab.hidden = true;
     readProgress.hidden = true;
     document.title = "订单来了酒店民宿 AI 实操入门蓝皮书";
     closePet();
-    const last = JSON.parse(localStorage.getItem("hb-last") || "null");
+    const last = getLast();
     if (last && byId(last.id)) {
       $("#continueTitle").textContent = byId(last.id).short;
       $("#continueLink").href = `#/p/${last.id}`;
@@ -194,33 +212,52 @@
   }
 
   async function showArticle(a, sec) {
+    const version = routeVersion;
+    document.body.classList.add("reading");
+    if (spy) { spy.disconnect(); spy = null; }
+    $("#artToc").innerHTML = ""; $("#mobileToc").hidden = true; $("#mobileToc").open = false; $("#artNav").innerHTML = "";
     coverView.hidden = true; articleView.hidden = false; tocView.hidden = true;
     topbar.hidden = false; fab.hidden = false;
     readProgress.hidden = false; readProgress.style.width = "0";
     closePet();
     document.title = `${a.short} · 订单来了蓝皮书`;
     markActive(a.id);
-    localStorage.setItem("hb-last", JSON.stringify({ id: a.id }));
+    try { localStorage.setItem("hb-last", JSON.stringify({ id: a.id })); } catch {}
 
     $("#crumb").innerHTML = `<a href="#/">封面</a>　/　${esc(a.groupName)}｜${esc(a.groupSub)}`;
     $("#artTitle").textContent = a.title;
     $("#artMeta").innerHTML =
       (a.tag ? `<span class="art-tag">${esc(a.tag)}</span><br>` : "") +
-      `${pieceNo(a)}　·　${a.shots ? a.shots + " 张真机图　·　" : ""}约 ${a.mins} 分钟`;
+      `${pieceNo(a)}　·　${a.shots ? a.shots + " 张真机图　·　" : ""}约 ${a.mins} 分钟<span class="art-edition">成书：2026 年 9 月 · 产品操作以当前版本为准</span>`;
 
     const body = $("#artBody");
-    body.innerHTML = await loadArticle(a.id);
+    body.innerHTML = '<p class="load-state" role="status">正在打开这一篇…</p>'; window.scrollTo(0, 0);
+    try {
+      const html = await loadArticle(a.id);
+      if (version !== routeVersion) return;
+      body.innerHTML = html;
+    } catch {
+      if (version !== routeVersion) return;
+      body.innerHTML = '<p class="load-state">这一篇暂时没有加载成功，请检查网络后重试。</p><button class="retry-btn" id="articleRetry">重新加载</button>';
+      $("#articleRetry").onclick = () => showArticle(a, sec); return;
+    }
     addCopyButtons(body);
+    body.querySelectorAll("table").forEach(table => { const wrap = document.createElement("div"); wrap.className = "table-scroll"; wrap.tabIndex = 0; wrap.setAttribute("role", "region"); wrap.setAttribute("aria-label", "表格，可左右滑动查看"); table.before(wrap); wrap.appendChild(table); });
+    body.querySelectorAll("img[data-full]").forEach(img => { const button = document.createElement("button"); button.className = "shot-open"; button.setAttribute("aria-label", "放大查看截图"); img.before(button); button.appendChild(img); button.onclick = () => openImage(img); });
 
     // 本页目录
     const secs = [...body.querySelectorAll("h3")];
     const toc = $("#artToc");
     if (secs.length) {
+      $("#mobileToc").hidden = false;
+      $("#mobileTocLinks").innerHTML = secs.map(h => `<a href="#/p/${a.id}#${h.id}">${esc(h.textContent)}</a>`).join("");
+      $("#mobileTocLinks").querySelectorAll("a").forEach((link, i) => { link.onclick = e => { e.preventDefault(); $("#mobileToc").open = false; secs[i].scrollIntoView({behavior:"smooth"}); history.replaceState(null,"",`#/p/${a.id}#${secs[i].id}`); }; });
       toc.innerHTML = `<div class="toc-tt">本页</div>` +
         secs.map((h) => `<a href="#/p/${a.id}#${h.id}" data-t="${h.id}">${esc(h.textContent)}</a>`).join("");
       toc.querySelectorAll("a").forEach((l) => (l.onclick = (e) => {
         e.preventDefault();
         document.getElementById(l.dataset.t)?.scrollIntoView({ behavior: "smooth" });
+        history.replaceState(null,"",`#/p/${a.id}#${l.dataset.t}`);
       }));
       if (spy) spy.disconnect();
       spy = new IntersectionObserver((es) => {
@@ -244,7 +281,6 @@
     $("#navToc").onclick = (e) => { e.stopPropagation(); goToc(); };
     $("#navShare").onclick = share;
 
-    window.scrollTo(0, 0);
     if (sec) setTimeout(() => document.getElementById(sec)?.scrollIntoView(), 60);
   }
 
@@ -256,7 +292,8 @@
       const b = document.createElement("button");
       b.className = "copy-btn"; b.textContent = "复制";
       b.onclick = () => {
-        navigator.clipboard.writeText(pre.innerText).then(() => {
+        copyText(pre.innerText).then(ok => {
+          if (!ok) { toast("请长按话术文字，选择复制"); return; }
           b.textContent = "已复制 ✓"; setTimeout(() => (b.textContent = "复制"), 1500);
         });
       };
@@ -265,8 +302,14 @@
   }
 
   /* ---------------- 分享 / 回顶 ---------------- */
-  function share() {
-    navigator.clipboard.writeText(location.href).then(() => toast("本篇链接已复制，发给别人就能直接打开"));
+  async function copyText(text) {
+    try { if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } } catch {}
+    const box = document.createElement("textarea"); box.value = text; box.style.cssText = "position:fixed;top:0;left:-9999px"; document.body.appendChild(box); box.select();
+    let ok = false; try { ok = document.execCommand("copy"); } catch {} box.remove(); return ok;
+  }
+  async function share() {
+    if (await copyText(location.href)) toast("本篇链接已复制，发给别人就能直接打开");
+    else { window.prompt("请复制本篇链接，或使用微信右上角菜单分享", location.href); }
   }
   $("#fabShare").onclick = share;
   $("#fabTop").onclick = () => window.scrollTo({ top: 0, behavior: "smooth" });
@@ -283,8 +326,29 @@
   const mask = $("#searchMask"), input = $("#searchInput"), list = $("#searchList");
   let sel = 0, results = [];
 
-  function openSearch() { mask.hidden = false; input.value = ""; doSearch(""); input.focus(); }
-  function closeSearch() { mask.hidden = true; }
+  let modalFocus = null, lockedY = 0, locked = false;
+  function lockScroll() {
+    if (locked) return; locked = true; lockedY = window.scrollY; modalFocus = document.activeElement;
+    document.body.style.position = "fixed"; document.body.style.top = `-${lockedY}px`; document.body.style.width = "100%";
+  }
+  function unlockScroll() {
+    if (!locked) return; locked = false; document.body.style.position = ""; document.body.style.top = ""; document.body.style.width = "";
+    window.scrollTo({top:lockedY,behavior:"instant"}); modalFocus?.focus({preventScroll:true});
+  }
+  async function ensureSearch() {
+    if (searchData) return;
+    if (!searchPromise) searchPromise = (async () => { searchData = embeddedJSON("search-json") || await getResource("data/search.json", true); })().finally(() => { searchPromise = null; });
+    await searchPromise;
+  }
+  async function openSearch() {
+    if (!M) return;
+    closeContact(); closeImage(); lockScroll(); mask.hidden = false; input.value = ""; input.focus();
+    results = []; list.innerHTML = '<p class="load-state">正在准备全文搜索…</p>'; $("#searchFoot").textContent = "";
+    try { await ensureSearch(); if (!mask.hidden) doSearch(input.value.trim()); }
+    catch { if (!mask.hidden) { list.innerHTML = '<p class="load-state">搜索暂时不可用，请检查网络。</p><button class="retry-btn" id="searchRetry">重试</button>'; $("#searchRetry").onclick = openSearch; } }
+  }
+  function closeSearch() { if (!mask.hidden) { mask.hidden = true; unlockScroll(); } }
+  $("#searchClose").onclick = closeSearch;
   $("#searchBtn").onclick = openSearch;
   document.querySelectorAll('[data-act="search"]').forEach((b) => (b.onclick = openSearch));
   document.querySelectorAll('[data-act="toc"]').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); goToc(); }));
@@ -293,6 +357,7 @@
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openSearch(); }
     if (e.key === "Escape") {
+      closeImage();
       if (!mask.hidden) closeSearch();
       if (!contactMask.hidden) closeContact();
       if (!petPanel.hidden) closePet();
@@ -301,8 +366,8 @@
 
   /* ---------------- 联系我 ---------------- */
   const contactMask = $("#contactMask");
-  function openContact() { contactMask.hidden = false; }
-  function closeContact() { contactMask.hidden = true; }
+  function openContact() { closeSearch(); closeImage(); lockScroll(); contactMask.hidden = false; const img = contactMask.querySelector("img"); if (!img.getAttribute("src")) img.src = img.dataset.src; $("#contactClose").focus(); }
+  function closeContact() { if (!contactMask.hidden) { contactMask.hidden = true; unlockScroll(); } }
   document.querySelectorAll('[data-act="contact"]').forEach((b) => (b.onclick = openContact));
   $("#contactClose").onclick = closeContact;
   contactMask.onclick = (e) => { if (e.target === contactMask) closeContact(); };
@@ -317,17 +382,19 @@
 
   function doSearch(q) {
     sel = 0;
+    if (!M || !searchData) return;
     if (!q) { results = []; paint(); $("#searchFoot").textContent = `↑↓ 选择 · 回车打开 · 共 ${M.meta.total} 篇可检索`; list.innerHTML = ""; return; }
     const ql = q.toLowerCase();
     results = M.articles
       .map((a) => {
         const ti = a.title.toLowerCase().indexOf(ql);
-        const bi = a.text.toLowerCase().indexOf(ql);
+        const text = searchData[a.id] || "";
+        const bi = text.toLowerCase().indexOf(ql);
         if (ti < 0 && bi < 0) return null;
         let sn = "";
         if (bi >= 0) {
           const s = Math.max(0, bi - 30);
-          sn = (s > 0 ? "…" : "") + a.text.slice(s, bi + q.length + 60) + "…";
+          sn = (s > 0 ? "…" : "") + text.slice(s, bi + q.length + 60) + "…";
         }
         return { id: a.id, title: a.short, group: a.groupName, sn, q, score: ti >= 0 ? 0 : 1 };
       })
@@ -348,5 +415,30 @@
   }
   const hl = (s, q) => esc(s).replace(new RegExp(esc(q).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), (m) => `<mark>${m}</mark>`);
 
-  load();
+  const imageMask = $("#imageMask"), imageFull = $("#imageFull");
+  let imageScale = 1;
+  function openImage(img) {
+    closeSearch(); closeContact(); lockScroll(); imageScale = 1; imageMask.hidden = false;
+    imageFull.src = img.dataset.full; imageFull.alt = img.alt; imageFull.style.width = "100%";
+    $("#imageStage").scrollTo(0,0); $("#imageClose").focus();
+  }
+  function closeImage() { if (!imageMask.hidden) { imageMask.hidden = true; imageFull.removeAttribute("src"); unlockScroll(); } }
+  $("#imageClose").onclick = closeImage;
+  $("#imagePlus").onclick = () => { imageScale = Math.min(4,imageScale + .5); imageFull.style.width = `${imageScale*100}%`; };
+  $("#imageMinus").onclick = () => { imageScale = Math.max(1,imageScale - .5); imageFull.style.width = `${imageScale*100}%`; };
+  imageFull.onerror = () => toast("截图暂时无法打开，请稍后重试");
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Tab") return;
+    const active = [mask,contactMask,imageMask].find(el => !el.hidden); if (!active) return;
+    const nodes = [...active.querySelectorAll('button,input,a[href],[tabindex="0"]')].filter(el => el.getClientRects().length);
+    if (!nodes.length) return;
+    const first=nodes[0], last=nodes[nodes.length-1];
+    if (e.shiftKey && document.activeElement===first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement===last) { e.preventDefault(); first.focus(); }
+  });
+  function boot() { load().catch(() => {
+    $("#heroStats").innerHTML = '目录暂时没有加载成功。<button class="retry-btn" id="bootRetry">重新加载</button>';
+    $("#bootRetry").onclick = boot;
+  }); }
+  boot();
 })();

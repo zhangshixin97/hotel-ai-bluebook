@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>订单来了酒店民宿 AI 实操入门蓝皮书</title>
 <link rel="icon" type="image/png" href="assets/img/favicon.png">
 <link rel="stylesheet" href="assets/content.css">
@@ -60,6 +60,7 @@
     </div>
   </section>
 
+  <section class="reading-paths" aria-label="按场景开始阅读"><h2>今天，你想先解决什么？</h2><div id="readingPaths"></div></section>
   <section class="picks">
     <div class="sec-head">
       <span class="sec-label">PICKS / 01-04</span>
@@ -127,7 +128,8 @@
     <article class="article-main" id="main">
       <h1 class="art-title" id="artTitle"></h1>
       <div class="art-meta" id="artMeta"></div>
-      <div class="article-body" id="artBody"></div>
+      <details class="mobile-toc" id="mobileToc" hidden><summary>本页目录</summary><nav id="mobileTocLinks" aria-label="本页目录"></nav></details>
+      <div class="article-body" id="artBody" aria-live="polite"></div>
       <nav class="art-nav" id="artNav"></nav>
     </article>
     <aside class="art-toc" id="artToc"></aside>
@@ -141,22 +143,22 @@
 </div>
 
 <!-- ============ 搜索 ============ -->
-<div class="search-mask" id="searchMask" hidden>
+<div class="search-mask" id="searchMask" role="dialog" aria-modal="true" aria-label="搜索全书" hidden>
   <div class="search-box">
     <input id="searchInput" type="text" placeholder="搜标题、正文、指令话术…" autocomplete="off">
-    <span class="search-esc">Esc</span>
+    <button class="search-esc" id="searchClose" aria-label="关闭搜索">关闭</button>
     <div class="search-list" id="searchList"></div>
     <div class="search-foot" id="searchFoot">↑↓ 选择 · 回车打开</div>
   </div>
 </div>
 
 <!-- ============ 联系我 ============ -->
-<div class="contact-mask" id="contactMask" hidden>
+<div class="contact-mask" id="contactMask" role="dialog" aria-modal="true" aria-label="联系作者" hidden>
   <div class="contact-card">
     <button class="contact-close" id="contactClose" title="关闭">×</button>
     <div class="contact-tt">联系我</div>
     <div class="contact-qr">
-      <img src="assets/img/qr.jpg" alt="微信二维码">
+      <img data-src="assets/img/qr.jpg" width="400" height="400" alt="微信二维码">
     </div>
     <div class="contact-note">扫码加微信，备注「蓝皮书」<br>反馈、纠错、合作都可以直接说</div>
     <div class="contact-author">张世鑫｜酒店民宿 AI 实战赋能</div>
@@ -202,7 +204,8 @@
   <div class="pet-panel-ft" id="petPanelFt"></div>
 </div>
 
-<div class="toast" id="toast" hidden></div>
+<div class="image-mask" id="imageMask" role="dialog" aria-modal="true" aria-label="查看截图" hidden><div class="image-toolbar"><button id="imageMinus" aria-label="缩小">−</button><button id="imagePlus" aria-label="放大">＋</button><button id="imageClose">关闭</button></div><div class="image-stage" id="imageStage"><img id="imageFull" alt=""></div><p class="image-hint">点击＋放大；可用双指缩放查看</p></div>
+<div class="toast" id="toast" role="status" hidden></div>
 
 <script src="assets/app.js"></script>
 </body>
